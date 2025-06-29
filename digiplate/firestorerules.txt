@@ -1,0 +1,85 @@
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper Functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(restaurantId) {
+      return isSignedIn() && request.auth.uid == restaurantId;
+    }
+
+    function isStaffWithRole(restaurantId, allowedRoles) {
+      let staffDocPath = /databases/$(database)/documents/staff/$(request.auth.uid);
+      return isSignedIn() && exists(staffDocPath) &&
+             get(staffDocPath).data.restaurantId == restaurantId &&
+             get(staffDocPath).data.role in allowedRoles;
+    }
+    
+    // Menu items can be read by anyone, but only managed by admin/manager.
+    match /menuItems/{itemId} {
+      allow read: if true;
+      allow create: if isOwner(request.resource.data.userId) || isStaffWithRole(request.resource.data.userId, ['admin', 'manager']);
+      allow update, delete: if isOwner(resource.data.userId) || isStaffWithRole(resource.data.userId, ['admin', 'manager']);
+    }
+    
+    // Categories can be read by anyone for the customer menu.
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow create, update, delete: if isOwner(resource.data.userId) || isStaffWithRole(resource.data.userId, ['admin', 'manager']);
+    }
+
+    // Stores can be read by anyone, but only managed by admin/manager. Only admin can delete.
+    match /stores/{storeId} {
+        allow read: if true;
+        allow create, update: if isOwner(request.resource.data.userId) || isStaffWithRole(request.resource.data.userId, ['admin', 'manager']);
+        allow delete: if isOwner(resource.data.userId);
+    }
+
+    // Orders can be read by anyone for status tracking.
+    // Created by anyone (customers). Updated by FOH, manager, admin. Deleted by manager, admin.
+    match /orders/{orderId} {
+      allow read: if true;
+      allow create: if true;
+      allow update: if isOwner(resource.data.userId) || isStaffWithRole(resource.data.userId, ['admin', 'manager', 'front_of_house']);
+      allow delete: if isOwner(resource.data.userId) || isStaffWithRole(resource.data.userId, ['admin', 'manager']);
+    }
+
+    // Restaurant profiles are publicly readable but only writable by the owner.
+    match /restaurantProfiles/{userId} {
+      allow read: if true;
+      allow write: if isOwner(userId);
+    }
+    
+    // A user can create their own staff document IF a valid invite exists for them.
+    // A staff document can be read by the staff member or the owner.
+    // It can only be updated/deleted by the owner.
+    match /staff/{staffId} {
+      allow get: if request.auth.uid == staffId || isOwner(get(/databases/$(database)/documents/staff/$(staffId)).data.restaurantId);
+      allow list: if isOwner(resource.data.restaurantId);
+      allow create: if request.auth.uid == staffId && exists(/databases/$(database)/documents/invites/$(request.resource.data.email));
+      allow update: if isOwner(resource.data.restaurantId) && request.resource.data.role != 'admin';
+      allow delete: if isOwner(resource.data.restaurantId);
+    }
+    
+    // Invites are keyed by email. They can be created by an admin.
+    // They can be read/deleted by the invited user OR the owner.
+    // Invites cannot be created for the 'admin' role.
+    match /invites/{email} {
+      allow get: if true; // Allow public GET for invite check during staff password setup.
+      allow list: if isOwner(resource.data.restaurantId);
+      allow create: if isOwner(request.resource.data.restaurantId) && request.resource.data.role != 'admin' && request.resource.data.email == email;
+      allow delete: if (isSignedIn() && request.auth.token.email == email) || isOwner(resource.data.restaurantId);
+    }
+
+    // Staff can read ingredients, admin/manager can manage them.
+    match /ingredients/{ingredientId} {
+      allow read: if isOwner(resource.data.userId) || isStaffWithRole(resource.data.userId, ['admin', 'manager', 'kitchen_staff']);
+      allow create, update: if isOwner(request.resource.data.userId) || isStaffWithRole(request.resource.data.userId, ['admin', 'manager']);
+      allow delete: if isOwner(resource.data.userId); // Only owner can delete to prevent breaking recipes.
+    }
+  }
+}
