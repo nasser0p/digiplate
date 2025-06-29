@@ -4,7 +4,7 @@ import { Store, RestaurantProfile } from '../types';
 import { DownloadIcon, PrintIcon } from './icons';
 import Modal from './Modal';
 import { createRoot } from 'react-dom/client';
-import TableTentPreview from './ui/TableTentPreview';
+import TableTentPreview from '../ui/TableTentPreview';
 import { useTranslation } from '../contexts/LanguageContext';
 
 interface QRCodeModalProps {
