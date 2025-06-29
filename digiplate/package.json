@@ -14,7 +14,7 @@
     "firebase": "^11.9.1",
     "recharts": "2.12.7",
     "@hello-pangea/dnd": "16.5.0",
-    "qrcode": "1.5.3"
+    "qrcode": "1.5.3",
     "sharp": "^0.34.2"
   },
   "devDependencies": {
