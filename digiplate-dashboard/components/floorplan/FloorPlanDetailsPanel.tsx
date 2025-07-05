@@ -3,6 +3,7 @@ import { FloorPlanTable, Order, TableStatus } from '../../types';
 import SlideInPanel from '../ui/SlideInPanel';
 import { useTranslation } from '../../contexts/LanguageContext';
 import { TranslationKey } from '../../i18n/en';
+import { XIcon } from '../icons';
 
 interface FloorPlanDetailsPanelProps {
     table: (FloorPlanTable & { status: TableStatus }) | null;
@@ -10,12 +11,13 @@ interface FloorPlanDetailsPanelProps {
     onClose: () => void;
     onUpdateStatus: (tableId: string, status: TableStatus) => void;
     onUpdateOrderItemStatus: (orderId: string, itemIndex: number, newStatus: boolean) => void;
+    onCancelItem: (orderId: string, itemIndex: number) => void;
     onAppendToOrder?: (orderId: string, tableNumber: string) => void;
     onPrintBill?: (order: Order) => void;
     onMarkAsComplete?: (orderId: string) => void;
 }
 
-const FloorPlanDetailsPanel: React.FC<FloorPlanDetailsPanelProps> = ({ table, order, onClose, onUpdateStatus, onUpdateOrderItemStatus, onAppendToOrder, onPrintBill, onMarkAsComplete }) => {
+const FloorPlanDetailsPanel: React.FC<FloorPlanDetailsPanelProps> = ({ table, order, onClose, onUpdateStatus, onUpdateOrderItemStatus, onCancelItem, onAppendToOrder, onPrintBill, onMarkAsComplete }) => {
     const { t } = useTranslation();
 
     if (!table) return null;
@@ -54,29 +56,45 @@ const FloorPlanDetailsPanel: React.FC<FloorPlanDetailsPanelProps> = ({ table, or
                     {order ? (
                         <div className="space-y-2">
                              {order.items.map((item, index) => (
-                                <label key={index} className={`flex items-start p-3 rounded-lg cursor-pointer transition-all duration-200 ${item.isDelivered ? 'bg-green-50 dark:bg-green-900/40' : 'bg-brand-gray-50 dark:bg-brand-gray-700/60'}`}>
-                                    <input
-                                        type="checkbox"
-                                        checked={!!item.isDelivered}
-                                        onChange={() => onUpdateOrderItemStatus(order.id, index, !item.isDelivered)}
-                                        className="h-5 w-5 mt-0.5 flex-shrink-0 rounded text-brand-teal focus:ring-brand-teal-dark border-gray-300 dark:border-gray-600 dark:bg-brand-gray-700"
-                                    />
-                                    <div className={`mx-4 flex-grow transition-opacity ${item.isDelivered ? 'opacity-50 line-through' : 'opacity-100'}`}>
-                                        <div className="font-semibold text-sm">{item.quantity}x {item.name}</div>
-                                        <div className="ps-2 text-xs text-brand-gray-500 dark:text-brand-gray-400 mt-1 space-y-1">
-                                            {item.selectedModifiers.length > 0 && (
-                                                <div>
-                                                    {item.selectedModifiers.map((mod) => mod.optionName).join(', ')}
+                                <li key={index} className={`rounded-lg transition-all duration-200 ${item.isDelivered ? 'bg-green-50 dark:bg-green-900/40' : 'bg-brand-gray-50 dark:bg-brand-gray-700/60'}`}>
+                                    <div className="flex items-start p-3">
+                                        <label className="flex items-start flex-grow cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={!!item.isDelivered}
+                                                onChange={() => onUpdateOrderItemStatus(order.id, index, !item.isDelivered)}
+                                                className="h-5 w-5 mt-0.5 flex-shrink-0 rounded text-brand-teal focus:ring-brand-teal-dark border-gray-300 dark:border-gray-600 dark:bg-brand-gray-700"
+                                            />
+                                            <div className={`mx-4 flex-grow transition-opacity ${item.isDelivered ? 'opacity-50 line-through' : 'opacity-100'}`}>
+                                                <div className="font-semibold text-sm">{item.quantity}x {item.name}</div>
+                                                <div className="ps-2 text-xs text-brand-gray-500 dark:text-brand-gray-400 mt-1 space-y-1">
+                                                    {item.selectedModifiers.length > 0 && (
+                                                        <div>
+                                                            {item.selectedModifiers.map((mod) => mod.optionName).join(', ')}
+                                                        </div>
+                                                    )}
+                                                    {item.notes && (
+                                                        <p className="italic text-amber-600 dark:text-amber-400">
+                                                            <span className="font-bold">{t('prep_view_note')}</span> {item.notes}
+                                                        </p>
+                                                    )}
                                                 </div>
-                                            )}
-                                            {item.notes && (
-                                                <p className="italic text-amber-600 dark:text-amber-400">
-                                                    <span className="font-bold">{t('prep_view_note')}</span> {item.notes}
-                                                </p>
-                                            )}
-                                        </div>
+                                            </div>
+                                        </label>
+                                        {!item.isDelivered && (
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onCancelItem(order.id, index);
+                                                }}
+                                                title={t('common_delete')}
+                                                className="p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/50 rounded-full ml-2 flex-shrink-0"
+                                            >
+                                                <XIcon className="w-4 h-4" />
+                                            </button>
+                                        )}
                                     </div>
-                                </label>
+                                </li>
                             ))}
                             <div className="border-t border-brand-gray-200 dark:border-brand-gray-700 pt-3 mt-3 flex justify-between font-bold">
                                 <span>{t('order_detail_total')}</span>
