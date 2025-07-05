@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
-import { doc, onSnapshot, setDoc, collection, query, where, updateDoc, getDoc, writeBatch, increment } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, collection, query, where, updateDoc, getDoc, writeBatch, increment, deleteDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { Role, FloorPlan, Order, FloorPlanTable, TableStatus, RestaurantProfile, MenuItem, Category } from '../../types';
 import { useTranslation } from '../../contexts/LanguageContext';
@@ -163,7 +163,7 @@ const FloorPlanPage: React.FC<FloorPlanPageProps> = ({ userId, role, profile }) 
 
     const handleUpdateOrderItemStatus = async (orderId: string, itemIndex: number, newStatus: boolean) => {
         const orderRef = doc(db, 'orders', orderId);
-        const orderToUpdate = orders.find(o => o.id === orderId);
+        const orderToUpdate = orders.find(o => o.id === orderId) || null;
         if (orderToUpdate) {
             const updatedItems = [...orderToUpdate.items];
             if (updatedItems[itemIndex]) {
@@ -172,6 +172,60 @@ const FloorPlanPage: React.FC<FloorPlanPageProps> = ({ userId, role, profile }) 
             }
         }
     };
+
+    const handleCancelItem = async (orderId: string, itemIndex: number) => {
+        if (!window.confirm(t('floor_plan_cancel_item_confirm'))) {
+            return;
+        }
+
+        const orderToUpdate = orders.find(o => o.id === orderId);
+        if (!orderToUpdate) {
+            console.error("Order not found");
+            return;
+        }
+
+        const batch = writeBatch(db);
+        const orderRef = doc(db, 'orders', orderId);
+
+        if (orderToUpdate.items.length === 1) {
+            // Last item, delete the order and update table status
+            batch.delete(orderRef);
+
+            if (floorPlan && orderToUpdate.plateNumber) {
+                const tableLabel = orderToUpdate.plateNumber.toUpperCase();
+                const newTables = floorPlan.tables.map(table =>
+                    table.label.toUpperCase() === tableLabel
+                    ? { ...table, status: 'seated' } // Revert to seated status
+                    : table
+                );
+                batch.update(doc(db, 'floorPlans', userId), { tables: newTables });
+            }
+        } else {
+            // More than one item, just remove the specific item
+            const newItems = [...orderToUpdate.items];
+            newItems.splice(itemIndex, 1);
+
+            const newSubtotal = newItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+            const newPlatformFee = newSubtotal * 0.03; // Recalculate fee
+            const newTotal = newSubtotal + orderToUpdate.tip + newPlatformFee; // Use existing tip
+
+            batch.update(orderRef, {
+                items: newItems,
+                subtotal: newSubtotal,
+                platformFee: newPlatformFee,
+                total: newTotal
+            });
+        }
+
+        try {
+            await batch.commit();
+            setSelectedTable(null); // Close panel on success
+        } catch (error) {
+            console.error("Failed to cancel item/order:", error);
+            alert("Error: Could not cancel the item.");
+        }
+    };
+
 
     const handleMarkOrderAsComplete = async (orderId: string) => {
         const orderToComplete = orders.find(o => o.id === orderId);
@@ -297,6 +351,7 @@ const FloorPlanPage: React.FC<FloorPlanPageProps> = ({ userId, role, profile }) 
                 onClose={() => setSelectedTable(null)}
                 onUpdateStatus={handleUpdateTableStatus}
                 onUpdateOrderItemStatus={handleUpdateOrderItemStatus}
+                onCancelItem={handleCancelItem}
                 onAppendToOrder={(orderId, tableNumber) => setRapidOrderContext({ orderIdToAppend: orderId, tableNumber })}
                 onPrintBill={handlePrintBill}
                 onMarkAsComplete={handleMarkOrderAsComplete}
